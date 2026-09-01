@@ -42,9 +42,22 @@ public enum AppleSecurity {
             kSecAttrService as String: service
         ]
 
-        let deleteStatus = SecItemDelete(lookup as CFDictionary)
-        guard deleteStatus == errSecSuccess || deleteStatus == errSecItemNotFound else {
-            throw AppleSecurityError.keychain(deleteStatus)
+        let update: [String: Any] = [
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecValueData as String: data
+        ]
+
+        let updateStatus = SecItemUpdate(
+            lookup as CFDictionary,
+            update as CFDictionary
+        )
+
+        if updateStatus == errSecSuccess {
+            return
+        }
+
+        guard updateStatus == errSecItemNotFound else {
+            throw AppleSecurityError.keychain(updateStatus)
         }
 
         var insert = lookup
@@ -126,6 +139,8 @@ public enum AppleSecurity {
         let query: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
+            kSecAttrTokenID as String: kSecAttrTokenIDSecureEnclave,
             kSecAttrApplicationTag as String: Data(tag.utf8),
             kSecReturnRef as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
@@ -137,6 +152,9 @@ public enum AppleSecurity {
         guard status == errSecSuccess else {
             throw AppleSecurityError.keychain(status)
         }
-        return (result as! SecKey)
+        guard let key = result as! SecKey? else {
+            throw AppleSecurityError.keychain(errSecInternalError)
+        }
+        return key
     }
 }
