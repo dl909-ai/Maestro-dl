@@ -38,6 +38,19 @@ jobs:
           retention-days: 1
           include-hidden-files: true
 
+  apple-security-test:
+    name: AppleSecurity Swift Package Tests
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v6
+
+      - name: Run AppleSecurity Tests
+        working-directory: ${{ github.workspace }}/apple-security
+        run: swift test
+
   ios-driver-lib-test:
     name: MaestroDriverLib Unit Tests
     runs-on: macos-latest
