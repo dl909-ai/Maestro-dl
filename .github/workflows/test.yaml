@@ -40,7 +40,7 @@ jobs:
 
   apple-security-test:
     name: AppleSecurity Swift Package Tests
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 10
 
     steps:
