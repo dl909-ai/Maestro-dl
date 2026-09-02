@@ -11,6 +11,11 @@ public enum AppleSecurityError: Error {
 }
 
 public enum AppleSecurity {
+    typealias SecItemCopyMatchingImplementation = (
+        CFDictionary,
+        UnsafeMutablePointer<CFTypeRef?>?
+    ) -> OSStatus
+
     public static func requireOwnerAuthentication(
         reason: String = "Authenticate to access protected data"
     ) async throws {
@@ -42,9 +47,22 @@ public enum AppleSecurity {
             kSecAttrService as String: service
         ]
 
-        let deleteStatus = SecItemDelete(lookup as CFDictionary)
-        guard deleteStatus == errSecSuccess || deleteStatus == errSecItemNotFound else {
-            throw AppleSecurityError.keychain(deleteStatus)
+        let update: [String: Any] = [
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecValueData as String: data
+        ]
+
+        let updateStatus = SecItemUpdate(
+            lookup as CFDictionary,
+            update as CFDictionary
+        )
+
+        if updateStatus == errSecSuccess {
+            return
+        }
+
+        guard updateStatus == errSecItemNotFound else {
+            throw AppleSecurityError.keychain(updateStatus)
         }
 
         var insert = lookup
@@ -123,20 +141,37 @@ public enum AppleSecurity {
     }
 
     public static func copySecureEnclavePrivateKey(tag: String) throws -> SecKey? {
+        try copySecureEnclavePrivateKey(
+            tag: tag,
+            copyMatching: SecItemCopyMatching
+        )
+    }
+
+    static func copySecureEnclavePrivateKey(
+        tag: String,
+        copyMatching: SecItemCopyMatchingImplementation
+    ) throws -> SecKey? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
+            kSecAttrTokenID as String: kSecAttrTokenIDSecureEnclave,
             kSecAttrApplicationTag as String: Data(tag.utf8),
             kSecReturnRef as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
 
         var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return nil }
+        let status = copyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
+            return nil
+        }
         guard status == errSecSuccess else {
             throw AppleSecurityError.keychain(status)
         }
-        return (result as! SecKey)
+        guard let key = result as? SecKey else {
+            throw AppleSecurityError.keychain(errSecInternalError)
+        }
+        return key
     }
 }
