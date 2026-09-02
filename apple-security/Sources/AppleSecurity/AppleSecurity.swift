@@ -11,6 +11,11 @@ public enum AppleSecurityError: Error {
 }
 
 public enum AppleSecurity {
+    typealias SecItemCopyMatchingImplementation = (
+        CFDictionary,
+        UnsafeMutablePointer<CFTypeRef?>?
+    ) -> OSStatus
+
     public static func requireOwnerAuthentication(
         reason: String = "Authenticate to access protected data"
     ) async throws {
@@ -136,6 +141,16 @@ public enum AppleSecurity {
     }
 
     public static func copySecureEnclavePrivateKey(tag: String) throws -> SecKey? {
+        try copySecureEnclavePrivateKey(
+            tag: tag,
+            copyMatching: SecItemCopyMatching
+        )
+    }
+
+    static func copySecureEnclavePrivateKey(
+        tag: String,
+        copyMatching: SecItemCopyMatchingImplementation
+    ) throws -> SecKey? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
@@ -147,12 +162,14 @@ public enum AppleSecurity {
         ]
 
         var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return nil }
+        let status = copyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
+            return nil
+        }
         guard status == errSecSuccess else {
             throw AppleSecurityError.keychain(status)
         }
-        guard let key = result as! SecKey? else {
+        guard let key = result as? SecKey else {
             throw AppleSecurityError.keychain(errSecInternalError)
         }
         return key
